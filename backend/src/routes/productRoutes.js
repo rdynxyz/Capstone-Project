@@ -78,16 +78,20 @@ router.post('/:id/bom', requireRole('owner'), async (req, res) => {
 // PUT /api/products/:id  -> update harga jual (setelah owner lihat HPP)
 router.put('/:id', requireRole('owner'), async (req, res) => {
   try {
-    const { product_name, category, selling_price } = req.body;
+    const { product_code, product_name, category, selling_price } = req.body;
     const pool = await getPool();
     const result = await pool.request()
       .input('id', sql.Int, req.params.id)
+      .input('product_code', sql.NVarChar, product_code)
       .input('product_name', sql.NVarChar, product_name)
       .input('category', sql.NVarChar, category)
       .input('selling_price', sql.Decimal(18, 2), selling_price)
       .query(`
-        UPDATE products SET product_name = @product_name, category = @category,
-               selling_price = @selling_price, updated_at = SYSDATETIME()
+        UPDATE products 
+        SET 
+          product_code = @product_code, product_name = @product_name,
+          category = @category, selling_price = @selling_price,
+          updated_at = SYSDATETIME()
         OUTPUT INSERTED.*
         WHERE product_id = @id
       `);

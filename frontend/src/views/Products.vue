@@ -41,6 +41,7 @@
         <button class="btn btn-outline" @click="editingProduct=null">Kembali</button>
       </div>
       <form @submit.prevent="submitEdit">
+        <div class="form-row"><label>Kode Produk</label><input v-model="editForm.product_code" required /></div>
         <div class="form-row"><label>Nama Produk</label><input v-model="editForm.product_name" required /></div>
         <div class="form-row"><label>Kategori</label><input v-model="editForm.category" /></div>
         <div class="form-row"><label>Harga Jual</label><input v-model.number="editForm.selling_price" type="number" step="100" /></div>
@@ -98,7 +99,7 @@ const form = reactive({ product_code: '', product_name: '', category: '', sellin
 const bomForm = reactive({ material_id: null, qty_per_unit: 0 });
 
 const editingProduct = ref(null);
-const editForm = reactive({ product_name: '', category: '', selling_price: 0 });
+const editForm = reactive({ product_code: '', product_name: '', category: '', selling_price: 0 });
 
 async function load() {
   const [p, m] = await Promise.all([api.get('/products'), api.get('/materials')]);
@@ -131,7 +132,7 @@ async function deleteProduct(p) {
 function editProduct(p) {
   selectedProduct.value = null;
   editingProduct.value = p;
-  Object.assign(editForm, { product_name: p.product_name, category: p.category, selling_price: p.selling_price });
+  Object.assign(editForm, { product_code: p.product_code, product_name: p.product_name, category: p.category, selling_price: p.selling_price });
 }
 
 async function submitEdit() {

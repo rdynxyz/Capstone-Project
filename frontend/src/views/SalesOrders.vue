@@ -2,7 +2,7 @@
   <div>
     <div class="topbar">
       <h2 style="margin:0">Pre-Order (Sales Order)</h2>
-      <button class="btn btn-primary" @click="showForm = !showForm">{{ showForm ? 'Tutup' : '+ Buat Pre-Order' }}</button>
+      <button class="btn btn-primary" @click="showForm = !showForm">{{ showForm ? 'Tutup' : 'Buat Pre-Order' }}</button>
     </div>
 
     <div class="card" v-if="showForm" style="margin-bottom:16px">
@@ -42,7 +42,10 @@
             <td>{{ formatDate(s.order_date) }}</td>
             <td>{{ formatDate(s.due_date) }}</td>
             <td><span class="badge" :class="statusClass(s.status)">{{ s.status }}</span></td>
-            <td><button class="btn btn-outline" @click="openDetail(s)">Detail & Harga</button></td>
+            <td  style="display:flex; gap:6px; justify-content:flex-end;">
+              <button class="btn btn-outline" @click="openDetail(s)">Detail & Harga</button>
+              <button v-if="s.status !== 'DELIVERED' && s.status !== 'CANCELLED'" class="btn btn-primary" @click="deliver(s)">Selesaikan Pesanan</button>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -65,9 +68,9 @@
             <td>{{ item.hpp_ref ? 'Rp ' + formatRp(item.hpp_ref) : 'Belum diproduksi' }}</td>
             <td>Rp {{ formatRp(item.unit_price) }}</td>
             <td>
-              <input v-model.number="priceForm[item.so_item_id]" type="number" step="100" placeholder="Rp." style="width:130px; height: 34px; padding:6px 8px; border:1px solid var(--border); border-radius:6px" />
+              <input v-model.number="priceForm[item.so_item_id]" type="number" step="100" placeholder="Isi harga baru" style="width:130px; padding:6px 8px; border:1px solid var(--border); border-radius:6px" />
             </td>
-            <td><button class="btn btn-accent" @click="savePrice(item)">Simpan</button></td>
+            <td style="display:flex; gap:6px; justify-content:flex-end;"><button class="btn btn-accent" @click="savePrice(item)">Simpan</button></td>
           </tr>
         </tbody>
       </table>
@@ -129,6 +132,25 @@ async function savePrice(item) {
     priceForm[item.so_item_id] = null;
   } catch (err) {
     alert('Gagal menyimpan harga: ' + (err.response?.data?.message || err.message));
+  }
+}
+
+async function deliver(s) {
+  if (!confirm(`Yakin pesanan ${s.so_number} akan diselesaikan dan diserahkan ke customer?`)) {
+    return;
+  }
+
+  try {
+    await api.post(`/sales-orders/${s.so_id}/deliver`);
+
+    alert('Pesanan berhasil diselesaikan dan diserahkan ke customer.');
+
+    await load();
+  } catch (err) {
+    alert(
+      'Gagal menyelesaikan pesanan: ' +
+      (err.response?.data?.message || err.message)
+    );
   }
 }
 

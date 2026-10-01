@@ -46,9 +46,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/sales-orders
-//  * Membuat Pre-Order (SO) sekaligus item-nya. Contoh: { customer_name, due_date, items:[{product_id, qty_order}] }
-//  * Setelah SO dibuat, otomatis membuat Production Order per item, lalu langsung cek stok bahan.
+//  POST /api/sales-orders - Membuat Pre-Order (SO) sekaligus item-nya. Contoh: { customer_name, due_date, items:[{product_id, qty_order}] }
 router.post('/', async (req, res) => {
   const pool = await getPool();
   const tx = new sql.Transaction(pool);
@@ -107,6 +105,64 @@ router.post('/', async (req, res) => {
   } catch (err) {
     try { await tx.rollback(); } catch (_) {}
     res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/sales-orders/:id/deliver - Finalisasi: barang diserahkan ke customer.
+router.post('/:id/deliver', async (req, res) => {
+  const pool = await getPool();
+  const tx = new sql.Transaction(pool);
+  try {
+    await tx.begin();
+
+    const soCheck = await new sql.Request(tx)
+      .input('id', sql.Int, req.params.id)
+      .query(`SELECT status FROM sales_orders WHERE so_id = @id`);
+    if (soCheck.recordset.length === 0) throw new Error('Pre-Order tidak ditemukan');
+    if (soCheck.recordset[0].status === 'DELIVERED') throw new Error('Pre-Order ini sudah pernah diserahkan sebelumnya');
+    if (soCheck.recordset[0].status === 'CANCELLED') throw new Error('Pre-Order ini sudah dibatalkan, tidak bisa diserahkan');
+
+    const items = await new sql.Request(tx)
+      .input('id', sql.Int, req.params.id)
+      .query(`
+        SELECT soi.product_id, soi.qty_order, p.product_name, p.finished_stock
+        FROM sales_order_items soi
+        JOIN products p ON p.product_id = soi.product_id
+        WHERE soi.so_id = @id
+      `);
+
+    for (const item of items.recordset) {
+      if (item.finished_stock < item.qty_order) {
+        throw new Error(`Stok produk jadi "${item.product_name}" tidak cukup (tersedia ${item.finished_stock}, dibutuhkan ${item.qty_order}). Pastikan produksi sudah selesai.`);
+      }
+    }
+
+    for (const item of items.recordset) {
+      await new sql.Request(tx)
+        .input('product_id', sql.Int, item.product_id)
+        .input('qty', sql.Int, item.qty_order)
+        .query(`UPDATE products SET finished_stock = finished_stock - @qty, updated_at = SYSDATETIME() WHERE product_id = @product_id`);
+
+      await new sql.Request(tx)
+        .input('item_id', sql.Int, item.product_id)
+        .input('qty', sql.Decimal(18, 3), item.qty_order)
+        .input('source_id', sql.Int, req.params.id)
+        .input('created_by', sql.Int, req.user.user_id)
+        .query(`
+          INSERT INTO stock_movements (item_type, item_id, movement_type, source_type, source_id, qty, created_by)
+          VALUES ('PRODUCT', @item_id, 'OUT', 'SALES_DELIVERY', @source_id, @qty, @created_by)
+        `);
+    }
+
+    await new sql.Request(tx)
+      .input('id', sql.Int, req.params.id)
+      .query(`UPDATE sales_orders SET status = 'DELIVERED' WHERE so_id = @id`);
+
+    await tx.commit();
+    res.json({ message: 'Barang berhasil diserahkan, stok produk jadi diperbarui' });
+  } catch (err) {
+    await tx.rollback();
+    res.status(400).json({ message: err.message });
   }
 });
 
